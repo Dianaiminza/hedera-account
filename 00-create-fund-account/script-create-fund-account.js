@@ -1,34 +1,28 @@
-import {
-    PrivateKey,
-} from '@hashgraph/sdk';
-import {
-    HDNode as ethersHdNode,
-} from '@ethersproject/hdnode';
+import { PrivateKey } from '@hashgraph/sdk';
+import { HDNode as ethersHdNode } from '@ethersproject/hdnode';
 import dotenv from 'dotenv';
+import bip39 from 'bip39'; // Import the entire module
 
 async function main() {
-    // Ensure required environment variables are available
     dotenv.config();
     if (!process.env.SEED_PHRASE) {
         throw new Error('Please set required keys in .env file.');
     }
 
-    // Create an ECSDA secp256k1 private key based on a BIP-39 seed phrase,
-    // plus the default BIP-32/BIP-44 HD Wallet derivation path used by Metamask.
-    // NOTE: Derive private key
-    // Step (1) in the accompanying tutorial
-    const hdNodeRoot = ethersHdNode.fromMnemonic(/* ... */);
+    const seedPhrase = process.env.SEED_PHRASE;
+
+    // Validate the seed phrase
+    if (!bip39.validateMnemonic(seedPhrase)) { // Use validateMnemonic instead of isValidMnemonic
+        throw new Error('Invalid mnemonic seed phrase.');
+    }
+
+    const hdNodeRoot = ethersHdNode.fromMnemonic(seedPhrase);
     const accountHdPath = `m/44'/60'/0'/0/0`;
     const hdNode = hdNodeRoot.derivePath(accountHdPath);
 
-    // At this point the account technically does not yet exist,
-    // and will need to be created when it receives its first transaction (later).
-    // Convert the private key to string format as well as an EVM address.
     const privateKey = PrivateKey.fromStringECDSA(hdNode.privateKey);
     const privateKeyHex = `0x${privateKey.toStringRaw()}`;
-    // NOTE: Derive EVM address
-    // Step (2) in the accompanying tutorial
-    const evmAddress = `0x${/* ... */}`;
+    const evmAddress = `0x${privateKey.publicKey.toEvmAddress()}`;
     const accountExplorerUrl = `https://hashscan.io/testnet/account/${evmAddress}`;
     const accountBalanceFetchApiUrl =
         `https://testnet.mirrornode.hedera.com/api/v1/balances?account.id=${evmAddress}&limit=1&order=asc`;
@@ -36,6 +30,7 @@ async function main() {
     let accountBalanceTinybar;
     let accountBalanceHbar;
     let accountId;
+
     try {
         const accountBalanceFetch = await fetch(accountBalanceFetchApiUrl);
         const accountBalanceJson = await accountBalanceFetch.json();
@@ -45,11 +40,10 @@ async function main() {
             accountBalanceHbar = new Intl.NumberFormat('en-GB', {
                 minimumFractionDigits: 8,
                 maximumFractionDigits: 8,
-            })
-            .format(accountBalanceTinybar * (10 ** -8));
+            }).format(accountBalanceTinybar * (10 ** -8));
         }
     } catch (ex) {
-        // do nothing
+        console.error('Error fetching account balance:', ex);
     }
 
     console.log(`privateKeyHex: ${privateKeyHex}`);
